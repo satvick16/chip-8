@@ -1,40 +1,47 @@
+#include <stack>
+#include <fstream>
 #include <iostream>
+
 #include <SDL2/SDL.h>
 
 #define WINDOW_WIDTH 64
 #define WINDOW_HEIGHT 32
-#define START_ADDRESS 512
 
-int main() {
-    uint16_t ram[4096]; // memory
+#define START_ADDRESS 512
+#define MEMORY_SIZE 4096 // 4kB
+#define NUM_VARS 16
+
+int main()
+{
+    uint8_t ram[MEMORY_SIZE]; // memory
     std::stack<short int> stack;
 
     uint8_t delayTimer;
     uint8_t soundTimer;
 
-    uint16_t* pc = &ram[START_ADDRESS]; // program counter: current instruction
+    uint8_t* pc = &ram[START_ADDRESS]; // program counter: current instruction
     uint16_t* I; // index register: memory locations
 
-    uint8_t vars[16]; // variable registers (V0 - VF)
+    uint8_t vars[NUM_VARS]; // variable registers (V0 - VF)
 
     uint8_t fontset[] = {
-        0x00F0, 0x0090, 0x0090, 0x0090, 0x00F0, // 0
-        0x0020, 0x0060, 0x0020, 0x0020, 0x0070, // 1
-        0x00F0, 0x0010, 0x00F0, 0x0080, 0x00F0, // 2
-        0x00F0, 0x0010, 0x00F0, 0x0010, 0x00F0, // 3
-        0x0090, 0x0090, 0x00F0, 0x0010, 0x0010, // 4
-        0x00F0, 0x0080, 0x00F0, 0x0010, 0x00F0, // 5
-        0x00F0, 0x0080, 0x00F0, 0x0090, 0x00F0, // 6
-        0x00F0, 0x0010, 0x0020, 0x0040, 0x0040, // 7
-        0x00F0, 0x0090, 0x00F0, 0x0090, 0x00F0, // 8
-        0x00F0, 0x0090, 0x00F0, 0x0010, 0x00F0, // 9
-        0x00F0, 0x0090, 0x00F0, 0x0090, 0x0090, // A
-        0x00E0, 0x0090, 0x00E0, 0x0090, 0x00E0, // B
-        0x00F0, 0x0080, 0x0080, 0x0080, 0x00F0, // C
-        0x00E0, 0x0090, 0x0090, 0x0090, 0x00E0, // D
-        0x00F0, 0x0080, 0x00F0, 0x0080, 0x00F0, // E
-        0x00F0, 0x0080, 0x00F0, 0x0080, 0x0080  // F
-    }
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
 
     // Store fontset in memory
     for (int i = 0; i < sizeof(fontset); i++)
@@ -43,7 +50,7 @@ int main() {
     }
 
     // Read ROM and store in RAM
-    std::string filePath = "";
+    std::string filePath = "test.ch8";
     std::ifstream romFile(filePath, std::ios::binary);
 
     if (romFile.is_open())
@@ -65,8 +72,13 @@ int main() {
     SDL_Init(SDL_INIT_VIDEO);
 
     // Create window and renderer
-    SDL_Window* window = SDL_CreateWindow("CHIP-8",
-        SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    SDL_Window* window = SDL_CreateWindow(
+        "CHIP-8",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        WINDOW_WIDTH,
+        WINDOW_HEIGHT,
+        0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
 
     // Main loop flag
@@ -77,44 +89,20 @@ int main() {
 
     // Main loop
     while (running) {
-        /*
-        fetch-decode-execute loop:
-        - fetch 2-byte instruction using pc and increment pc by 2
-        - decode: switch statement for first half-byte which is instruction type (nested)
+        // Fetch instruction by combining 2 adjacent bytes
+        uint8_t left = ram[pc];
+        uint8_t right = ram[pc + 1];
 
-        X: The second nibble. Used to look up one of the 16 registers (VX) from V0 through VF.
-        Y: The third nibble. Also used to look up one of the 16 registers (VY) from V0 through VF.
-        N: The fourth nibble. A 4-bit number.
-        NN: The second byte (third and fourth nibbles). An 8-bit immediate number.
-        NNN: The second, third and fourth nibbles. A 12-bit immediate memory address.
+        uint8_t instructionType = (left & 0xF0) >> 4;
         
-        instructions:
+        uint8_t X = left & 0x0F;
+        uint8_t Y = (right & 0xF0) >> 4;
+        uint8_t N = right & 0x0F;
 
-        00E0 (clear screen)
-        1NNN (jump)
-        6XNN (set register VX)
-        7XNN (add value to register VX)
-        ANNN (set index register I)
-        DXYN (display/draw) */
+        uint8_t NN = right;
+        uint16_t NNN = (X << 12) + right;
 
-        uint16_t instruction = *pc;
         pc += 2;
-
-        uint8_t instructionType = (instruction >> 12);
-
-        switch (instructionType)
-        {
-            case value1:
-                // code to execute if expression matches value1
-                break;
-            case value2:
-                // code to execute if expression matches value2
-                break;
-            // more cases...
-            default:
-                // code to execute if expression doesn't match any case
-                break;
-        }
 
         // Use keyboard scancodes
 
@@ -131,6 +119,50 @@ int main() {
         SDL_RenderClear(renderer);
 
         // Draw stuff here
+
+        switch (instructionType)
+        {
+            case 0:
+                SDL_RenderClear(renderer); // 00E0
+                break;
+            case 1:
+                pc = NNN // 1NNN
+                break;
+            case 2:
+                break;
+            case 3:
+                break;
+            case 4:
+                break;
+            case 5:
+                break;
+            case 6:
+                vars[X] = NN // 6XNN
+                break;
+            case 7:
+                vars[X] += NN // 7XNN
+                break;
+            case 8:
+                break;
+            case 9:
+                break;
+            case 10: // A
+                I = NNN // ANNN
+                break;
+            case 11: // B
+                break;
+            case 12: // C
+                break;
+            case 13: // D
+                // DXYN
+                break;
+            case 14: // E
+                break;
+            case 15: // F
+                break;
+            default:
+                break;
+        }
 
         // Update screen
         SDL_RenderPresent(renderer);
@@ -154,5 +186,6 @@ int main() {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
+
     return 0;
 }
