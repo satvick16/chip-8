@@ -36,7 +36,7 @@ void printUint8(uint8_t x)
 int main()
 {
     uint8_t ram[MEMORY_SIZE] = {0}; // memory
-    std::stack<short int> stack;
+    std::stack<uint8_t*> stack;
 
     uint8_t delayTimer = 0x00;
     uint8_t soundTimer = 0x00;
@@ -144,8 +144,6 @@ int main()
                 running = false;
         }
 
-        // Draw stuff here
-
         switch (instructionType)
         {
             case 0:
@@ -154,6 +152,10 @@ int main()
                 {
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
                     SDL_RenderClear(renderer);
+                } else if (left == 0x00 && right == 0xEE)
+                {
+                    pc = stack.top();
+                    stack.pop();
                 }
                 break;
             case 1:
@@ -161,12 +163,14 @@ int main()
                 pc = &ram[NNN];
                 break;
             case 2:
+                stack.push(pc);
+                pc = &ram[NNN];
                 break;
-            case 3:
+            case 3: // TODO
                 break;
-            case 4:
+            case 4: // TODO
                 break;
-            case 5:
+            case 5: // TODO
                 break;
             case 6:
                 // 6XNN
@@ -193,19 +197,41 @@ int main()
                         vars[X] ^= vars[Y];
                         break;
                     case 4: // add
-                        vars[X] += vars[Y]; // TODO: check for overflow
-                        break;
+                        {
+                            uint8_t temp = vars[X] + vars[Y];
+                            vars[NUM_VARS - 1] = (temp > 255) ? 1 : 0;
+                            vars[X] += vars[Y];
+                            break;
+                        }
                     case 5: // subtract
-                        vars[X] -= vars[Y]; // TODO: carry flag
+                        vars[NUM_VARS - 1] = (vars[X] > vars[Y]) ? 1 : 0;
+                        vars[X] -= vars[Y];
                         break;
                     case 7: // subtract
-                        vars[X] = vars[Y] - vars[X]; // TODO: carry flag
+                        vars[NUM_VARS - 1] = (vars[Y] > vars[X]) ? 1 : 0;
+                        vars[X] = vars[Y] - vars[X];
                         break;
+                    case 6: // shift
+                        {
+                            vars[X] = vars[Y];
+                            bool outBit = vars[X] & 1;
+                            vars[X] >>= 1;
+                            vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
+                            break;
+                        }
+                    case 14: // shift
+                        {
+                            vars[X] = vars[Y];
+                            bool outBit = (vars[X] & (1 << 7)) >> 7;
+                            vars[X] <<= 1;
+                            vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
+                            break;
+                        }
                     default:
                         break;
                 }
                 break;
-            case 9:
+            case 9: // TODO: 9XY0
                 break;
             case 10: // A
                 // ANNN
