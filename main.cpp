@@ -198,22 +198,53 @@ int main()
             case 13: // D
                 // DXYN
                 {
-                    uint8_t xCoord = vars[X] & 63; // modulo
-                    uint8_t yCoord = vars[Y] & 31; // modulo
+                    uint8_t xCoord = vars[X] & (WINDOW_WIDTH - 1);
+                    uint8_t yCoord = vars[Y] & (WINDOW_HEIGHT - 1);
 
                     vars[NUM_VARS - 1] = 0;
 
-                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-
                     for (int i = 0; i < 5; i++) {
-                        uint8_t row = (*I) + i;
+                        uint8_t spriteRow = (*I) + i;
 
                         for (int j = 0; j < 8; j++) {
+                            // If you reach right edge of screen, stop drawing row
+                            if (xCoord > WINDOW_WIDTH - 1)
+                            {
+                                break;
+                            }
 
+                            bool spriteBit = (spriteRow & (1 << (7 - j))) != 0;
+
+                            // Read the pixel color at (xCoord, yCoord)
+                            Uint32 pixel;
+                            SDL_Rect rect = { xCoord, yCoord, 1, 1 };
+                            SDL_RenderReadPixels(renderer, &rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel));
+
+                            // Extract color components
+                            Uint8 r, g, b, a;
+                            SDL_GetRGBA(pixel, SDL_GetWindowSurface(window)->format, &r, &g, &b, &a);
+
+                            // Check bit
+                            bool windowBit = (r == 255 && g == 255 && b == 255);
+
+                            // Update display accordingly
+                            if (spriteBit && windowBit)
+                            {
+                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                                SDL_RenderDrawPoint(renderer, xCoord, yCoord);
+                                
+                                vars[NUM_VARS - 1] = 0;
+                            } else if (spriteBit && !windowBit)
+                            {
+                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                                SDL_RenderDrawPoint(renderer, xCoord, yCoord);
+                            }
+
+                            xCoord++;
                         }
-                    }
 
-                    SDL_RenderDrawPoint(renderer, xCoord, yCoord);
+                        yCoord++;
+                    }
                     break;
                 }
             case 14: // E
