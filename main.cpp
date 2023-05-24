@@ -1,6 +1,7 @@
 #include <stack>
 #include <random>
 #include <fstream>
+#include <cstdlib>
 #include <iostream>
 
 #include <SDL2/SDL.h>
@@ -8,21 +9,31 @@
 #define WINDOW_WIDTH 64
 #define WINDOW_HEIGHT 32
 
-#define START_ADDRESS 512
+#define START_ROM 512
 #define MEMORY_SIZE 4096 // 4kB
 #define NUM_VARS 16
 
 #define START_FONT 80
 
+void ramSnapshot(uint8_t ram[])
+{
+    for (int i = 0; i < 4096; i++)
+        std::cout << static_cast<int>(ram[i]) << " ";
+
+    std::cout << std::endl;
+
+    return;
+}
+
 int main()
 {
-    uint8_t ram[MEMORY_SIZE]; // memory
+    uint8_t ram[MEMORY_SIZE] = {0}; // memory
     std::stack<short int> stack;
 
     uint8_t delayTimer;
     uint8_t soundTimer;
 
-    uint8_t* pc = &ram[START_ADDRESS]; // program counter: current instruction
+    uint8_t* pc = &ram[START_ROM]; // program counter: current instruction
     uint8_t* I; // index register: memory locations
 
     uint8_t vars[NUM_VARS]; // variable registers (V0 - VF)
@@ -47,9 +58,12 @@ int main()
     };
 
     // Store fontset in memory
-    for (int i = START_FONT; i < sizeof(fontset); i++)
+    int ramIndex = START_FONT;
+
+    for (int i = 0; i < sizeof(fontset); i++)
     {
-        ram[i] = fontset[i];
+        ram[ramIndex] = fontset[i];
+        ramIndex++;
     }
 
     // Read ROM and store in RAM
@@ -59,17 +73,15 @@ int main()
     if (romFile.is_open())
     {
         std::string data;
-        
+
         while (romFile)
-        {
             data.push_back(romFile.get());
-        }
 
         for (int i = 0; i < data.size(); i++)
-        {
-            ram[START_ADDRESS + i] = data[i];
-        }
+            ram[START_ROM + i] = data[i];
     }
+
+    ramSnapshot(ram);
 
     // Initialize SDL
     SDL_Init(SDL_INIT_VIDEO);
@@ -112,9 +124,8 @@ int main()
         // Poll for events
         while (SDL_PollEvent(&event)) {
             // Check for quit event
-            if (event.type == SDL_QUIT) {
+            if (event.type == SDL_QUIT)
                 running = false;
-            }
         }
 
         // Draw stuff here
@@ -209,9 +220,7 @@ int main()
                         for (int j = 0; j < 8; j++) {
                             // If you reach right edge of screen, stop drawing row
                             if (xCoord > WINDOW_WIDTH - 1)
-                            {
                                 break;
-                            }
 
                             bool spriteBit = (spriteRow & (1 << (7 - j))) != 0;
 
@@ -243,6 +252,10 @@ int main()
                             xCoord++;
                         }
 
+                        // Stop if you reach bottom edge of screen
+                        if (yCoord > WINDOW_HEIGHT - 1)
+                            break;
+
                         yCoord++;
                     }
                     break;
@@ -272,9 +285,7 @@ int main()
         }
 
         if (delayTimer == 0 || soundTimer == 0)
-        {
             running = false;
-        }
     }
 
     // Cleanup and exit
