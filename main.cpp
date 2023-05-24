@@ -2,27 +2,35 @@
 #include <random>
 #include <fstream>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <unistd.h>
 
 #include <SDL2/SDL.h>
 
-#define WINDOW_WIDTH 64
-#define WINDOW_HEIGHT 32
-
-#define START_ROM 512
-#define MEMORY_SIZE 4096 // 4kB
-#define NUM_VARS 16
-
-#define START_FONT 80
+#include "constants.hpp"
 
 void ramSnapshot(uint8_t ram[])
 {
-    for (int i = 0; i < 4096; i++)
-        std::cout << static_cast<int>(ram[i]) << " ";
+    for (int i = 0; i < 4096 / 2; i++)
+    {
+        // std::cout << std::hex << static_cast<int>(ram[i]) << " ";
+        std::cout << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ram[i]) << static_cast<int>(ram[i + 1]) << " ";
+    }
 
     std::cout << std::endl;
 
     return;
+}
+
+void printUint8(uint8_t x)
+{
+    for (int i = 0; i < 8; i++)
+    {
+        std::cout << ((x & (1 << (7 - i))) ? 1 : 0);
+    }
+
+    std::cout << std::endl;
 }
 
 int main()
@@ -30,8 +38,8 @@ int main()
     uint8_t ram[MEMORY_SIZE] = {0}; // memory
     std::stack<short int> stack;
 
-    uint8_t delayTimer;
-    uint8_t soundTimer;
+    uint8_t delayTimer = 0x00;
+    uint8_t soundTimer = 0x00;
 
     uint8_t* pc = &ram[START_ROM]; // program counter: current instruction
     uint8_t* I; // index register: memory locations
@@ -81,7 +89,7 @@ int main()
             ram[START_ROM + i] = data[i];
     }
 
-    ramSnapshot(ram);
+    // ramSnapshot(ram);
 
     // Initialize SDL
     SDL_Init(SDL_INIT_VIDEO);
@@ -91,8 +99,8 @@ int main()
         "CHIP-8",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
-        WINDOW_WIDTH,
-        WINDOW_HEIGHT,
+        GRID_WIDTH * PIXEL_SIZE,
+        GRID_HEIGHT * PIXEL_SIZE,
         0);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
 
@@ -102,11 +110,19 @@ int main()
     // Event handler
     SDL_Event event;
 
+    int ctr = 0;
+
     // Main loop
     while (running) {
+        ctr++;
+
         // Fetch instruction using 2 adjacent bytes
         uint8_t left = *pc;
         uint8_t right = *(pc + 1);
+
+        uint16_t full = (left << 8) + right;
+
+        std::cout << "0x" << std::setfill('0') << std::setw(4) << std::hex << full << std::endl;
 
         uint8_t instructionType = (left & 0xF0) >> 4;
 
@@ -115,7 +131,7 @@ int main()
         uint8_t N = right & 0x0F;
 
         uint8_t NN = right;
-        uint16_t NNN = (X << 12) + right;
+        uint16_t NNN = (X << 8) + right;
 
         pc += 2;
 
@@ -134,8 +150,11 @@ int main()
         {
             case 0:
                 // 00E0
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                SDL_RenderClear(renderer);
+                if (left == 0x00 && right == 0xE0)
+                {
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+                    SDL_RenderClear(renderer);
+                }
                 break;
             case 1:
                 // 1NNN
@@ -209,17 +228,21 @@ int main()
             case 13: // D
                 // DXYN
                 {
-                    uint8_t xCoord = vars[X] & (WINDOW_WIDTH - 1);
-                    uint8_t yCoord = vars[Y] & (WINDOW_HEIGHT - 1);
+                    uint8_t xIni = vars[X] & (GRID_WIDTH - 1);
+                    uint8_t yIni = vars[Y] & (GRID_HEIGHT - 1);
+
+                    uint8_t xCoord = xIni;
+                    uint8_t yCoord = yIni;
 
                     vars[NUM_VARS - 1] = 0;
 
-                    for (int i = 0; i < 5; i++) {
-                        uint8_t spriteRow = (*I) + i;
+                    for (int i = 0; i < N; i++) {
+                        xCoord = xIni;
+                        uint8_t spriteRow = *(I + i);
 
                         for (int j = 0; j < 8; j++) {
                             // If you reach right edge of screen, stop drawing row
-                            if (xCoord > WINDOW_WIDTH - 1)
+                            if (xCoord >= GRID_WIDTH)
                                 break;
 
                             bool spriteBit = (spriteRow & (1 << (7 - j))) != 0;
@@ -239,21 +262,23 @@ int main()
                             // Update display accordingly
                             if (spriteBit && windowBit)
                             {
-                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                                SDL_RenderDrawPoint(renderer, xCoord, yCoord);
-                                
-                                vars[NUM_VARS - 1] = 0;
+                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+                                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
+                                SDL_RenderFillRect(renderer, &pixelRect);
+
+                                vars[NUM_VARS - 1] = 1;
                             } else if (spriteBit && !windowBit)
                             {
-                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-                                SDL_RenderDrawPoint(renderer, xCoord, yCoord);
+                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+                                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
+                                SDL_RenderFillRect(renderer, &pixelRect);
                             }
 
                             xCoord++;
                         }
 
                         // Stop if you reach bottom edge of screen
-                        if (yCoord > WINDOW_HEIGHT - 1)
+                        if (yCoord >= GRID_HEIGHT)
                             break;
 
                         yCoord++;
@@ -265,7 +290,7 @@ int main()
             case 15: // F
                 break;
             default:
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
                 SDL_RenderClear(renderer);
                 break;
         }
@@ -274,7 +299,7 @@ int main()
         SDL_RenderPresent(renderer);
 
         // Delay to cap frame rate
-        SDL_Delay(16);
+        SDL_Delay(FRAME_DELAY);
 
         if (delayTimer > 0) { delayTimer--; }
         if (soundTimer > 0) { soundTimer--; }
@@ -284,8 +309,11 @@ int main()
             // Beep
         }
 
-        if (delayTimer == 0 || soundTimer == 0)
-            running = false;
+        // if (ctr == 5)
+        // {
+        //     sleep(10);
+        //     break;
+        // }
     }
 
     // Cleanup and exit
