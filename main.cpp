@@ -1,4 +1,5 @@
 #include <stack>
+#include <random>
 #include <fstream>
 #include <iostream>
 
@@ -11,6 +12,8 @@
 #define MEMORY_SIZE 4096 // 4kB
 #define NUM_VARS 16
 
+#define START_FONT 80
+
 int main()
 {
     uint8_t ram[MEMORY_SIZE]; // memory
@@ -20,7 +23,7 @@ int main()
     uint8_t soundTimer;
 
     uint8_t* pc = &ram[START_ADDRESS]; // program counter: current instruction
-    uint16_t* I; // index register: memory locations
+    uint8_t* I; // index register: memory locations
 
     uint8_t vars[NUM_VARS]; // variable registers (V0 - VF)
 
@@ -44,7 +47,7 @@ int main()
     };
 
     // Store fontset in memory
-    for (int i = 0; i < sizeof(fontset); i++)
+    for (int i = START_FONT; i < sizeof(fontset); i++)
     {
         ram[i] = fontset[i];
     }
@@ -89,12 +92,12 @@ int main()
 
     // Main loop
     while (running) {
-        // Fetch instruction by combining 2 adjacent bytes
-        uint8_t left = ram[pc];
-        uint8_t right = ram[pc + 1];
+        // Fetch instruction using 2 adjacent bytes
+        uint8_t left = *pc;
+        uint8_t right = *(pc + 1);
 
         uint8_t instructionType = (left & 0xF0) >> 4;
-        
+
         uint8_t X = left & 0x0F;
         uint8_t Y = (right & 0xF0) >> 4;
         uint8_t N = right & 0x0F;
@@ -114,19 +117,18 @@ int main()
             }
         }
 
-        // Clear screen
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-
         // Draw stuff here
 
         switch (instructionType)
         {
             case 0:
-                SDL_RenderClear(renderer); // 00E0
+                // 00E0
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderClear(renderer);
                 break;
             case 1:
-                pc = NNN // 1NNN
+                // 1NNN
+                pc = &ram[NNN];
                 break;
             case 2:
                 break;
@@ -137,30 +139,90 @@ int main()
             case 5:
                 break;
             case 6:
-                vars[X] = NN // 6XNN
+                // 6XNN
+                vars[X] = NN;
                 break;
             case 7:
-                vars[X] += NN // 7XNN
+                // 7XNN
+                vars[X] += NN;
                 break;
             case 8:
+                // 8XY_
+                switch (N)
+                {
+                    case 0: // set
+                        vars[X] = vars[Y];
+                        break;
+                    case 1: // or
+                        vars[X] |= vars[Y];
+                        break;
+                    case 2: // and
+                        vars[X] &= vars[Y];
+                        break;
+                    case 3: // xor
+                        vars[X] ^= vars[Y];
+                        break;
+                    case 4: // add
+                        vars[X] += vars[Y]; // TODO: check for overflow
+                        break;
+                    case 5: // subtract
+                        vars[X] -= vars[Y]; // TODO: carry flag
+                        break;
+                    case 7: // subtract
+                        vars[X] = vars[Y] - vars[X]; // TODO: carry flag
+                        break;
+                    default:
+                        break;
+                }
                 break;
             case 9:
                 break;
             case 10: // A
-                I = NNN // ANNN
+                // ANNN
+                I = &ram[NNN];
                 break;
             case 11: // B
                 break;
             case 12: // C
-                break;
+                // CXNN
+                {
+                    std::random_device rd;
+                    std::mt19937 gen(rd());
+                    std::uniform_int_distribution<uint16_t> dist(0, std::numeric_limits<uint8_t>::max());
+                    
+                    uint8_t randomValue = static_cast<uint8_t>(dist(gen));
+
+                    vars[X] = randomValue & NN;
+                    break;
+                }
             case 13: // D
                 // DXYN
-                break;
+                {
+                    uint8_t xCoord = vars[X] & 63; // modulo
+                    uint8_t yCoord = vars[Y] & 31; // modulo
+
+                    vars[NUM_VARS - 1] = 0;
+
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+                    for (int i = 0; i < 5; i++) {
+                        uint8_t row = (*I) + i;
+
+                        for (int j = 0; j < 8; j++) {
+
+                        }
+                    }
+
+                    SDL_RenderDrawPoint(renderer, xCoord, yCoord);
+                    break;
+                }
             case 14: // E
                 break;
             case 15: // F
                 break;
             default:
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderClear(renderer);
                 break;
         }
 
@@ -170,16 +232,18 @@ int main()
         // Delay to cap frame rate
         SDL_Delay(16);
 
-        // Decrement timers
-        delayTimer--;
-        soundTimer--;
+        if (delayTimer > 0) { delayTimer--; }
+        if (soundTimer > 0) { soundTimer--; }
+
+        if (soundTimer > 0)
+        {
+            // Beep
+        }
 
         if (delayTimer == 0 || soundTimer == 0)
         {
             running = false;
         }
-
-        // Beep
     }
 
     // Cleanup and exit
