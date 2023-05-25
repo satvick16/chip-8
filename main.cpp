@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
-#include <unistd.h>
 
+#include <unistd.h>
 #include <SDL2/SDL.h>
 
 #include "constants.hpp"
@@ -255,10 +255,8 @@ int main()
                 // DXYN
                 {
                     uint8_t xIni = vars[X] & (GRID_WIDTH - 1);
-                    uint8_t yIni = vars[Y] & (GRID_HEIGHT - 1);
-
                     uint8_t xCoord = xIni;
-                    uint8_t yCoord = yIni;
+                    uint8_t yCoord = vars[Y] & (GRID_HEIGHT - 1);
 
                     vars[NUM_VARS - 1] = 0;
 
@@ -334,12 +332,6 @@ int main()
         {
             // Beep
         }
-
-        // if (ctr == 5)
-        // {
-        //     sleep(10);
-        //     break;
-        // }
     }
 
     // Cleanup and exit
