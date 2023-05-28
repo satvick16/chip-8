@@ -148,11 +148,11 @@ int main()
         {
             case 0:
                 // 00E0
-                if (left == 0x00 && right == 0xE0)
+                if (right == 0xE0)
                 {
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
                     SDL_RenderClear(renderer);
-                } else if (left == 0x00 && right == 0xEE)
+                } else if (right == 0xEE)
                 {
                     pc = stack.top();
                     stack.pop();
@@ -247,6 +247,15 @@ int main()
                 I = &ram[NNN];
                 break;
             case 11: // B
+                if (oldBCommand)
+                {
+                    // BNNN
+                    pc = &ram[NNN + vars[0]];
+                } else
+                {
+                    // BXNN
+                    pc = &ram[NNN + vars[X]];
+                }
                 break;
             case 12: // C
                 // CXNN
@@ -319,8 +328,27 @@ int main()
                     break;
                 }
             case 14: // E
+                if (right == 0x9E)
+                {
+                } else if (right == 0xA1)
+                {
+                }
                 break;
             case 15: // F
+                switch (right)
+                {
+                    case 0x07:
+                        vars[X] = delayTimer;
+                        break;
+                    case 0x15:
+                        delayTimer = vars[X];
+                        break;
+                    case 0x18:
+                        soundTimer = vars[X];
+                        break;
+                    default:
+                        break;
+                }
                 break;
             default:
                 break;

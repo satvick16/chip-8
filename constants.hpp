@@ -13,4 +13,6 @@ const int NUM_VARS = 16;
 const int START_ROM = 512;
 const int START_FONT = 80;
 
+const bool oldBCommand = true;
+
 #endif  // CONSTANTS_H
