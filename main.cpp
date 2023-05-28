@@ -335,6 +335,7 @@ int main()
                 }
                 break;
             case 15: // F
+                // FX__
                 switch (right)
                 {
                     case 0x07:
@@ -345,6 +346,14 @@ int main()
                         break;
                     case 0x18:
                         soundTimer = vars[X];
+                        break;
+                    case 0x1E:
+                        break;
+                    case 0x0A:
+                        break;
+                    case 0x29:
+                        break;
+                    case 0x33:
                         break;
                     default:
                         break;
