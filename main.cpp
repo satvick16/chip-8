@@ -163,14 +163,21 @@ int main()
                 pc = &ram[NNN];
                 break;
             case 2:
+                // 2NNN
                 stack.push(pc);
                 pc = &ram[NNN];
                 break;
-            case 3: // TODO
+            case 3:
+                // 3XNN
+                pc += (vars[X] == NN) ? 2 : 0;
                 break;
-            case 4: // TODO
+            case 4:
+                // 4XNN
+                pc += (vars[X] != NN) ? 2 : 0;
                 break;
-            case 5: // TODO
+            case 5:
+                // 5XY0
+                pc += (vars[X] == vars[Y]) ? 2 : 0;
                 break;
             case 6:
                 // 6XNN
@@ -231,7 +238,9 @@ int main()
                         break;
                 }
                 break;
-            case 9: // TODO: 9XY0
+            case 9:
+                // 9XY0
+                pc += (vars[X] == vars[Y]) ? 2 : 0;
                 break;
             case 10: // A
                 // ANNN
@@ -314,8 +323,6 @@ int main()
             case 15: // F
                 break;
             default:
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-                SDL_RenderClear(renderer);
                 break;
         }
 
