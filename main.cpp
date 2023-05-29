@@ -169,6 +169,17 @@ void instructionDXYN(SDL_Window* window, SDL_Renderer* renderer, uint8_t* vars, 
     }
 }
 
+void instructionCXNN(uint8_t* vars, uint8_t X, uint8_t NN)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint16_t> dist(0, std::numeric_limits<uint8_t>::max());
+    
+    uint8_t randomValue = static_cast<uint8_t>(dist(gen));
+
+    vars[X] = randomValue & NN;
+}
+
 int main()
 {
     uint8_t ram[MEMORY_SIZE] = {0}; // memory
@@ -238,8 +249,6 @@ int main()
         switch (instructionType)
         {
             case 0:
-                // 00E0
-                // 00EE
                 if (right == 0xE0)
                 {
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
@@ -302,17 +311,8 @@ int main()
                 }
                 break;
             case 12: // C
-                // CXNN
-                {
-                    std::random_device rd;
-                    std::mt19937 gen(rd());
-                    std::uniform_int_distribution<uint16_t> dist(0, std::numeric_limits<uint8_t>::max());
-                    
-                    uint8_t randomValue = static_cast<uint8_t>(dist(gen));
-
-                    vars[X] = randomValue & NN;
-                    break;
-                }
+                instructionCXNN(vars, X, NN);
+                break;
             case 13: // D
                 instructionDXYN(window, renderer, vars, I, X, Y, N);
                 break;
@@ -324,7 +324,6 @@ int main()
                 }
                 break;
             case 15: // F
-                // FX__
                 switch (right)
                 {
                     case 0x07:
