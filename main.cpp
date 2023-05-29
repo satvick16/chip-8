@@ -10,42 +10,8 @@
 
 #include "constants.hpp"
 
-void ramSnapshot(uint8_t ram[])
+void setupFont(uint8_t* ram)
 {
-    for (int i = 0; i < 4096 / 2; i++)
-    {
-        // std::cout << std::hex << static_cast<int>(ram[i]) << " ";
-        std::cout << "0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ram[i]) << static_cast<int>(ram[i + 1]) << " ";
-    }
-
-    std::cout << std::endl;
-
-    return;
-}
-
-void printUint8(uint8_t x)
-{
-    for (int i = 0; i < 8; i++)
-    {
-        std::cout << ((x & (1 << (7 - i))) ? 1 : 0);
-    }
-
-    std::cout << std::endl;
-}
-
-int main()
-{
-    uint8_t ram[MEMORY_SIZE] = {0}; // memory
-    std::stack<uint8_t*> stack;
-
-    uint8_t delayTimer = 0x00;
-    uint8_t soundTimer = 0x00;
-
-    uint8_t* pc = &ram[START_ROM]; // program counter: current instruction
-    uint8_t* I; // index register: memory locations
-
-    uint8_t vars[NUM_VARS]; // variable registers (V0 - VF)
-
     uint8_t fontset[] = {
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -73,7 +39,10 @@ int main()
         ram[ramIndex] = fontset[i];
         ramIndex++;
     }
+}
 
+void readRom(uint8_t* ram)
+{
     // Read ROM and store in RAM
     std::string filePath = "test.ch8";
     std::ifstream romFile(filePath, std::ios::binary);
@@ -88,8 +57,134 @@ int main()
         for (int i = 0; i < data.size(); i++)
             ram[START_ROM + i] = data[i];
     }
+}
 
-    // ramSnapshot(ram);
+void instruction8XYN(uint8_t* vars, uint8_t X, uint8_t Y, uint8_t N)
+{
+    // 8XY_
+    switch (N)
+    {
+        case 0: // set
+            vars[X] = vars[Y];
+            break;
+        case 1: // or
+            vars[X] |= vars[Y];
+            break;
+        case 2: // and
+            vars[X] &= vars[Y];
+            break;
+        case 3: // xor
+            vars[X] ^= vars[Y];
+            break;
+        case 4: // add
+            {
+                uint8_t temp = vars[X] + vars[Y];
+                vars[NUM_VARS - 1] = (temp > 255) ? 1 : 0;
+                vars[X] += vars[Y];
+                break;
+            }
+        case 5: // subtract
+            vars[NUM_VARS - 1] = (vars[X] > vars[Y]) ? 1 : 0;
+            vars[X] -= vars[Y];
+            break;
+        case 7: // subtract
+            vars[NUM_VARS - 1] = (vars[Y] > vars[X]) ? 1 : 0;
+            vars[X] = vars[Y] - vars[X];
+            break;
+        case 6: // shift
+            {
+                vars[X] = vars[Y];
+                bool outBit = vars[X] & 1;
+                vars[X] >>= 1;
+                vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
+                break;
+            }
+        case 14: // shift
+            {
+                vars[X] = vars[Y];
+                bool outBit = (vars[X] & (1 << 7)) >> 7;
+                vars[X] <<= 1;
+                vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
+                break;
+            }
+        default:
+            break;
+    }
+}
+
+void instructionDXYN(SDL_Window* window, SDL_Renderer* renderer, uint8_t* vars, uint8_t* I, uint8_t X, uint8_t Y, uint8_t N)
+{
+    uint8_t xIni = vars[X] & (GRID_WIDTH - 1);
+    uint8_t xCoord = xIni;
+    uint8_t yCoord = vars[Y] & (GRID_HEIGHT - 1);
+
+    vars[NUM_VARS - 1] = 0;
+
+    for (int i = 0; i < N; i++) {
+        xCoord = xIni;
+        uint8_t spriteRow = *(I + i);
+
+        for (int j = 0; j < 8; j++) {
+            // If you reach right edge of screen, stop drawing row
+            if (xCoord >= GRID_WIDTH)
+                break;
+
+            bool spriteBit = (spriteRow & (1 << (7 - j))) != 0;
+
+            // Read the pixel color at (xCoord, yCoord)
+            Uint32 pixel;
+            SDL_Rect rect = { xCoord, yCoord, 1, 1 };
+            SDL_RenderReadPixels(renderer, &rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel));
+
+            // Extract color components
+            Uint8 r, g, b, a;
+            SDL_GetRGBA(pixel, SDL_GetWindowSurface(window)->format, &r, &g, &b, &a);
+
+            // Check bit
+            bool windowBit = (r == 255 && g == 255 && b == 255);
+
+            // Update display accordingly
+            if (spriteBit && windowBit)
+            {
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
+                SDL_RenderFillRect(renderer, &pixelRect);
+
+                vars[NUM_VARS - 1] = 1;
+            } else if (spriteBit && !windowBit)
+            {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
+                SDL_RenderFillRect(renderer, &pixelRect);
+            }
+
+            xCoord++;
+        }
+
+        // Stop if you reach bottom edge of screen
+        if (yCoord >= GRID_HEIGHT)
+            break;
+
+        yCoord++;
+    }
+}
+
+int main()
+{
+    uint8_t ram[MEMORY_SIZE] = {0}; // memory
+    std::stack<uint8_t*> stack;
+
+    uint8_t delayTimer = 0x00;
+    uint8_t soundTimer = 0x00;
+
+    uint8_t* pc = &ram[START_ROM]; // program counter: current instruction
+    uint8_t* I; // index register: memory locations
+
+    uint8_t vars[NUM_VARS]; // variable registers (V0 - VF)
+
+    setupFont(ram);
+
+    readRom(ram);
 
     // Initialize SDL
     SDL_Init(SDL_INIT_VIDEO);
@@ -110,12 +205,8 @@ int main()
     // Event handler
     SDL_Event event;
 
-    int ctr = 0;
-
     // Main loop
     while (running) {
-        ctr++;
-
         // Fetch instruction using 2 adjacent bytes
         uint8_t left = *pc;
         uint8_t right = *(pc + 1);
@@ -148,6 +239,7 @@ int main()
         {
             case 0:
                 // 00E0
+                // 00EE
                 if (right == 0xE0)
                 {
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
@@ -188,55 +280,7 @@ int main()
                 vars[X] += NN;
                 break;
             case 8:
-                // 8XY_
-                switch (N)
-                {
-                    case 0: // set
-                        vars[X] = vars[Y];
-                        break;
-                    case 1: // or
-                        vars[X] |= vars[Y];
-                        break;
-                    case 2: // and
-                        vars[X] &= vars[Y];
-                        break;
-                    case 3: // xor
-                        vars[X] ^= vars[Y];
-                        break;
-                    case 4: // add
-                        {
-                            uint8_t temp = vars[X] + vars[Y];
-                            vars[NUM_VARS - 1] = (temp > 255) ? 1 : 0;
-                            vars[X] += vars[Y];
-                            break;
-                        }
-                    case 5: // subtract
-                        vars[NUM_VARS - 1] = (vars[X] > vars[Y]) ? 1 : 0;
-                        vars[X] -= vars[Y];
-                        break;
-                    case 7: // subtract
-                        vars[NUM_VARS - 1] = (vars[Y] > vars[X]) ? 1 : 0;
-                        vars[X] = vars[Y] - vars[X];
-                        break;
-                    case 6: // shift
-                        {
-                            vars[X] = vars[Y];
-                            bool outBit = vars[X] & 1;
-                            vars[X] >>= 1;
-                            vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
-                            break;
-                        }
-                    case 14: // shift
-                        {
-                            vars[X] = vars[Y];
-                            bool outBit = (vars[X] & (1 << 7)) >> 7;
-                            vars[X] <<= 1;
-                            vars[NUM_VARS - 1] = (outBit) ? 1 : 0;
-                            break;
-                        }
-                    default:
-                        break;
-                }
+                instruction8XYN(vars, X, Y, N);
                 break;
             case 9:
                 // 9XY0
@@ -270,63 +314,8 @@ int main()
                     break;
                 }
             case 13: // D
-                // DXYN
-                {
-                    uint8_t xIni = vars[X] & (GRID_WIDTH - 1);
-                    uint8_t xCoord = xIni;
-                    uint8_t yCoord = vars[Y] & (GRID_HEIGHT - 1);
-
-                    vars[NUM_VARS - 1] = 0;
-
-                    for (int i = 0; i < N; i++) {
-                        xCoord = xIni;
-                        uint8_t spriteRow = *(I + i);
-
-                        for (int j = 0; j < 8; j++) {
-                            // If you reach right edge of screen, stop drawing row
-                            if (xCoord >= GRID_WIDTH)
-                                break;
-
-                            bool spriteBit = (spriteRow & (1 << (7 - j))) != 0;
-
-                            // Read the pixel color at (xCoord, yCoord)
-                            Uint32 pixel;
-                            SDL_Rect rect = { xCoord, yCoord, 1, 1 };
-                            SDL_RenderReadPixels(renderer, &rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel));
-
-                            // Extract color components
-                            Uint8 r, g, b, a;
-                            SDL_GetRGBA(pixel, SDL_GetWindowSurface(window)->format, &r, &g, &b, &a);
-
-                            // Check bit
-                            bool windowBit = (r == 255 && g == 255 && b == 255);
-
-                            // Update display accordingly
-                            if (spriteBit && windowBit)
-                            {
-                                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-                                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
-                                SDL_RenderFillRect(renderer, &pixelRect);
-
-                                vars[NUM_VARS - 1] = 1;
-                            } else if (spriteBit && !windowBit)
-                            {
-                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-                                SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
-                                SDL_RenderFillRect(renderer, &pixelRect);
-                            }
-
-                            xCoord++;
-                        }
-
-                        // Stop if you reach bottom edge of screen
-                        if (yCoord >= GRID_HEIGHT)
-                            break;
-
-                        yCoord++;
-                    }
-                    break;
-                }
+                instructionDXYN(window, renderer, vars, I, X, Y, N);
+                break;
             case 14: // E
                 if (right == 0x9E)
                 {
