@@ -390,3 +390,8 @@ void CHIP8::fullCleanup()
     SDL_DestroyWindow(this->window);
     SDL_Quit();
 }
+
+bool CHIP8::isRunning()
+{
+    return this->running;
+}

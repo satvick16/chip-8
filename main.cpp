@@ -6,7 +6,7 @@ int main()
 
     chip8.setupGUI();
 
-    while (chip8.running) {
+    while (chip8.isRunning()) {
         chip8.handleEvents();
         chip8.cycle();
         chip8.frameCleanup();

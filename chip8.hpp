@@ -60,4 +60,6 @@ public:
     
     void frameCleanup();
     void fullCleanup();
+
+    bool isRunning();
 };
