@@ -1,3 +1,4 @@
+#include <map>
 #include <stack>
 #include <random>
 #include <fstream>
@@ -151,7 +152,8 @@ void instructionDXYN(SDL_Window* window, SDL_Renderer* renderer, uint8_t* vars, 
                 SDL_RenderFillRect(renderer, &pixelRect);
 
                 vars[NUM_VARS - 1] = 1;
-            } else if (spriteBit && !windowBit)
+            }
+            else if (spriteBit && !windowBit)
             {
                 SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
                 SDL_Rect pixelRect = {xCoord * PIXEL_SIZE, yCoord * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE};
@@ -178,6 +180,38 @@ void instructionCXNN(uint8_t* vars, uint8_t X, uint8_t NN)
     uint8_t randomValue = static_cast<uint8_t>(dist(gen));
 
     vars[X] = randomValue & NN;
+}
+
+void instructionFX(
+    uint8_t* vars, uint8_t right, uint8_t X, 
+    uint8_t soundTimer, uint8_t delayTimer, 
+    uint8_t* I, bool keyDown, uint8_t* pc, uint8_t keyHex)
+{
+    switch (right)
+    {
+        case 0x07:
+            vars[X] = delayTimer;
+            break;
+        case 0x15:
+            delayTimer = vars[X];
+            break;
+        case 0x18:
+            soundTimer = vars[X];
+            break;
+        case 0x1E:
+            (*I) += vars[X];
+            break;
+        case 0x0A:
+            pc -= (!keyDown) ? 2 : 0;
+            vars[X] = (keyDown) ? keyHex : vars[X];
+            break;
+        case 0x29:
+            break;
+        case 0x33:
+            break;
+        default:
+            break;
+    }
 }
 
 int main()
@@ -216,6 +250,19 @@ int main()
     // Event handler
     SDL_Event event;
 
+    // Keyboard status
+    SDL_Scancode scancode;
+    bool keyDown = false;
+    uint8_t keyHex;
+
+    // Keyboard mapping
+    std::map<SDL_Scancode, uint8_t> keyMap = {
+        {SDL_SCANCODE_1, 1}, {SDL_SCANCODE_2, 2}, {SDL_SCANCODE_3, 3}, {SDL_SCANCODE_4, 12},
+        {SDL_SCANCODE_Q, 4}, {SDL_SCANCODE_W, 5}, {SDL_SCANCODE_E, 6}, {SDL_SCANCODE_R, 13},
+        {SDL_SCANCODE_A, 7}, {SDL_SCANCODE_S, 8}, {SDL_SCANCODE_D, 9}, {SDL_SCANCODE_F, 14},
+        {SDL_SCANCODE_Z, 10}, {SDL_SCANCODE_X, 0}, {SDL_SCANCODE_C, 11}, {SDL_SCANCODE_V, 15}
+    };
+
     // Main loop
     while (running) {
         // Fetch instruction using 2 adjacent bytes
@@ -224,7 +271,7 @@ int main()
 
         uint16_t full = (left << 8) + right;
 
-        std::cout << "0x" << std::setfill('0') << std::setw(4) << std::hex << full << std::endl;
+        // std::cout << "0x" << std::setfill('0') << std::setw(4) << std::hex << full << std::endl;
 
         uint8_t instructionType = (left & 0xF0) >> 4;
 
@@ -237,13 +284,28 @@ int main()
 
         pc += 2;
 
-        // Use keyboard scancodes
-
         // Poll for events
         while (SDL_PollEvent(&event)) {
             // Check for quit event
             if (event.type == SDL_QUIT)
+            {
                 running = false;
+            }
+            else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+            {
+                if (event.type == SDL_KEYDOWN)
+                {
+                    keyDown = true;
+                    scancode = event.key.keysym.scancode;
+                    keyHex = keyMap[scancode];
+
+                    // std::cout << scancode << std::endl;
+                }
+                else
+                {
+                    keyDown = false;
+                }
+            }
         }
 
         switch (instructionType)
@@ -253,7 +315,8 @@ int main()
                 {
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
                     SDL_RenderClear(renderer);
-                } else if (right == 0xEE)
+                }
+                else if (right == 0xEE)
                 {
                     pc = stack.top();
                     stack.pop();
@@ -300,15 +363,8 @@ int main()
                 I = &ram[NNN];
                 break;
             case 11: // B
-                if (oldBCommand)
-                {
-                    // BNNN
-                    pc = &ram[NNN + vars[0]];
-                } else
-                {
-                    // BXNN
-                    pc = &ram[NNN + vars[X]];
-                }
+                // BNNN, BXNN
+                pc = (oldBCommand) ? &ram[NNN + vars[0]] : pc = &ram[NNN + vars[X]];
                 break;
             case 12: // C
                 instructionCXNN(vars, X, NN);
@@ -319,33 +375,15 @@ int main()
             case 14: // E
                 if (right == 0x9E)
                 {
-                } else if (right == 0xA1)
+                    pc += (keyHex == vars[X]) ? 2 : 0;
+                }
+                else if (right == 0xA1)
                 {
+                    pc += (keyHex != vars[X]) ? 2 : 0;
                 }
                 break;
             case 15: // F
-                switch (right)
-                {
-                    case 0x07:
-                        vars[X] = delayTimer;
-                        break;
-                    case 0x15:
-                        delayTimer = vars[X];
-                        break;
-                    case 0x18:
-                        soundTimer = vars[X];
-                        break;
-                    case 0x1E:
-                        break;
-                    case 0x0A:
-                        break;
-                    case 0x29:
-                        break;
-                    case 0x33:
-                        break;
-                    default:
-                        break;
-                }
+                instructionFX(vars, right, X, soundTimer, delayTimer, I, keyDown, pc, keyHex);
                 break;
             default:
                 break;
