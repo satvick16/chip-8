@@ -214,6 +214,33 @@ void instructionFX(
     }
 }
 
+void handleEvents(SDL_Event event, bool running, SDL_Scancode scancode, bool keyDown, uint8_t keyHex, std::map<SDL_Scancode, uint8_t> keyMap)
+{
+    // Poll for events
+    while (SDL_PollEvent(&event)) {
+        // Check for quit event
+        if (event.type == SDL_QUIT)
+        {
+            running = false;
+        }
+        else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+        {
+            if (event.type == SDL_KEYDOWN)
+            {
+                keyDown = true;
+                scancode = event.key.keysym.scancode;
+                keyHex = keyMap[scancode];
+
+                // std::cout << scancode << std::endl;
+            }
+            else
+            {
+                keyDown = false;
+            }
+        }
+    }
+}
+
 int main()
 {
     uint8_t ram[MEMORY_SIZE] = {0}; // memory
@@ -271,7 +298,7 @@ int main()
 
         uint16_t full = (left << 8) + right;
 
-        // std::cout << "0x" << std::setfill('0') << std::setw(4) << std::hex << full << std::endl;
+        std::cout << "0x" << std::setfill('0') << std::setw(4) << std::hex << full << std::endl;
 
         uint8_t instructionType = (left & 0xF0) >> 4;
 
@@ -284,29 +311,7 @@ int main()
 
         pc += 2;
 
-        // Poll for events
-        while (SDL_PollEvent(&event)) {
-            // Check for quit event
-            if (event.type == SDL_QUIT)
-            {
-                running = false;
-            }
-            else if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
-            {
-                if (event.type == SDL_KEYDOWN)
-                {
-                    keyDown = true;
-                    scancode = event.key.keysym.scancode;
-                    keyHex = keyMap[scancode];
-
-                    // std::cout << scancode << std::endl;
-                }
-                else
-                {
-                    keyDown = false;
-                }
-            }
-        }
+        handleEvents(event, running, scancode, keyDown, keyHex, keyMap);
 
         switch (instructionType)
         {
@@ -322,57 +327,47 @@ int main()
                     stack.pop();
                 }
                 break;
-            case 1:
-                // 1NNN
+            case 1: // 1NNN
                 pc = &ram[NNN];
                 break;
-            case 2:
-                // 2NNN
+            case 2: // 2NNN
                 stack.push(pc);
                 pc = &ram[NNN];
                 break;
-            case 3:
-                // 3XNN
+            case 3: // 3XNN
                 pc += (vars[X] == NN) ? 2 : 0;
                 break;
-            case 4:
-                // 4XNN
+            case 4: // 4XNN
                 pc += (vars[X] != NN) ? 2 : 0;
                 break;
-            case 5:
-                // 5XY0
+            case 5: // 5XY0
                 pc += (vars[X] == vars[Y]) ? 2 : 0;
                 break;
-            case 6:
-                // 6XNN
+            case 6: // 6XNN
                 vars[X] = NN;
                 break;
-            case 7:
-                // 7XNN
+            case 7: // 7XNN
                 vars[X] += NN;
                 break;
-            case 8:
+            case 8: // 8XYN
                 instruction8XYN(vars, X, Y, N);
                 break;
-            case 9:
-                // 9XY0
+            case 9: // 9XY0
                 pc += (vars[X] == vars[Y]) ? 2 : 0;
                 break;
-            case 10: // A
-                // ANNN
+            case 10: // ANNN
                 I = &ram[NNN];
                 break;
-            case 11: // B
-                // BNNN, BXNN
+            case 11: // BNNN, BXNN
                 pc = (oldBCommand) ? &ram[NNN + vars[0]] : pc = &ram[NNN + vars[X]];
                 break;
-            case 12: // C
+            case 12: // CXNN
                 instructionCXNN(vars, X, NN);
                 break;
-            case 13: // D
+            case 13: // DXYN
                 instructionDXYN(window, renderer, vars, I, X, Y, N);
                 break;
-            case 14: // E
+            case 14: // EX__
                 if (right == 0x9E)
                 {
                     pc += (keyHex == vars[X]) ? 2 : 0;
