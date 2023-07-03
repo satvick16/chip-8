@@ -2,7 +2,7 @@
 
 CHIP8::CHIP8()
 {
-    (this->ram)[MEMORY_SIZE] = {0}; // memory
+    std::fill(std::begin(this->ram), std::end(this->ram), 0); // memory
     
     this->delayTimer = 0x00;
     this->soundTimer = 0x00;
@@ -116,6 +116,7 @@ void CHIP8::cycle()
 
     pc += 2;
 
+    // Decode instruction
     switch (instructionType)
         {
         case 0:
@@ -162,7 +163,7 @@ void CHIP8::cycle()
             I = &ram[NNN];
             break;
         case 11: // BNNN, BXNN
-            pc = (oldBCommand) ? &ram[NNN + (this->vars)[0]] : pc = &ram[NNN + (this->vars)[X]];
+            pc = (oldBCommand) ? &ram[NNN + (this->vars)[0]] : &ram[NNN + (this->vars)[X]];
             break;
         case 12: // CXNN
             instructionCXNN(X, NN);
@@ -342,7 +343,7 @@ void CHIP8::instructionFX(uint8_t right, uint8_t X)
     switch (right)
     {
         case 0x07:
-            (this->vars)[X] = this->delayTimer;
+            (this->vars)[X] = static_cast<uint8_t>(this->delayTimer);
             break;
         case 0x15:
             this->delayTimer = (this->vars)[X];
@@ -357,9 +358,18 @@ void CHIP8::instructionFX(uint8_t right, uint8_t X)
             this->pc -= (!this->keyDown) ? 2 : 0;
             (this->vars)[X] = (this->keyDown) ? this->keyHex : (this->vars)[X];
             break;
-        case 0x29:
+        case 0x29: // TODO
             break;
         case 0x33:
+            {
+                uint8_t num = (this->vars)[X];
+
+                (*(this->I + 2)) = num % 10;
+                num /= 10;
+                (*(this->I + 1)) = num % 10;
+                num /= 10;
+                (*(this->I)) = num;
+            }
             break;
         default:
             break;
